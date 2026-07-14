@@ -1,8 +1,8 @@
 # PVS Internal Document API Gateway
 
-A lightweight Node.js service that will run inside the PVS LAN and provide controlled document access to the existing PVS-Web2 backend.
+A lightweight Node.js service that runs inside the PVS LAN and provides controlled document access to the existing PVS-Web2 backend.
 
-Phase 1 implements the project skeleton, validated configuration, health checks, IP allowlisting, HMAC service authentication, structured logging, temporary-directory maintenance, tests, and graceful shutdown. It intentionally does **not** expose document or ZIP endpoints yet.
+Phases 1 and 2 provide the secured service foundation and single-document verification and streaming. ZIP and generated-report endpoints are not implemented yet.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Node binds to `127.0.0.1:3100` by default. IIS will later terminate HTTPS and re
 - Node.js 22
 - Windows server inside the LAN for deployment
 - SQL Anywhere ODBC driver and DSN
-- A dedicated service identity with narrowly scoped permissions
+- Dedicated database and Windows service identities with narrowly scoped permissions
 
 ## Setup
 
@@ -34,6 +34,16 @@ npm start
 
 Replace all placeholder secrets and credentials in `.env`. The service fails at startup when required configuration is missing or unsafe.
 
+## Storage roots
+
+```env
+DOCUMENT_SOURCE_ROOT=\\fs2\public\PTS Share\Client Services
+GENERATED_REPORT_ROOT=\\fs2\public\PTS Share\Client Services\AI Summaries
+DOCUMENT_TEMP_ROOT=./temp
+```
+
+Normal document access is read-only and uses `DOCUMENT_SOURCE_ROOT`. Phase 2 does not copy documents into the local temporary directory.
+
 ## Health endpoints
 
 ```text
@@ -41,21 +51,36 @@ GET /health/live
 GET /health/ready
 ```
 
-`/health/live` only confirms that the process is running.
+`/health/live` confirms that the process is running. `/health/ready` checks the database, source storage, generated-report storage, and project-local temporary directory while returning safe status labels only.
 
-`/health/ready` checks the database, source storage, generated-report storage, and the project-local temporary directory. It returns safe status labels only and does not expose paths, DSNs, credentials, or account names.
+## Single-document endpoint
+
+```http
+GET /v1/documents/:documentId?clientId=<clientId>
+```
+
+The gateway independently verifies that the document belongs to the supplied client before it retrieves the source path or reads FS2. It accepts IDs only and never accepts a filesystem path.
+
+The file is streamed directly:
+
+```text
+FS2 -> gateway -> PVS-Web2 -> browser
+```
+
+The gateway does not set public `Content-Disposition`; the main backend retains control of public view/download behavior and filenames.
+
+See [Phase 2 documentation](docs/phase-2-single-document.md).
 
 ## Protected `/v1` routes
 
-Every future `/v1` route is protected in this order:
+Every `/v1` route is protected in this order:
 
 1. Request ID
 2. Caller IP allowlist
 3. Exact JSON-body capture
 4. HMAC authentication
-5. Route validation and controller logic
-
-Phase 1 does not add business endpoints. A correctly signed request to an unknown `/v1` route therefore reaches the authenticated 404 response.
+5. Shutdown guard
+6. Route validation and controller logic
 
 Required headers:
 
@@ -88,16 +113,18 @@ The signature is Base64URL-encoded HMAC-SHA256 using the secret assigned to the 
 npm test
 ```
 
-The test suite covers valid and invalid signatures, missing headers, unknown keys, stale and future timestamps, replayed nonces, changed query/body content, caller IP restrictions, and safe health output.
+Tests cover service authentication, caller IP restrictions, safe health output, ID validation, client/document ownership rejection, source-path containment, safe filesystem error mapping, and streamed response bytes.
 
 ## Temporary files
 
 The configured temporary directory defaults to `./temp` under the project root. The service only removes gateway-created entries with approved prefixes and never recursively clears arbitrary project files.
 
+Single-document streaming does not use this directory.
+
 ## Phase status
 
 - [x] Phase 1: skeleton and service security
-- [ ] Phase 2: single-document streaming
+- [x] Phase 2: single-document streaming
 - [ ] Phase 3: selected ZIP and ZIP All
 - [ ] Phase 4: filtered and batch ZIP
 - [ ] Phase 5: generated AI reports
