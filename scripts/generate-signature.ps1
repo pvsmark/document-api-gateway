@@ -6,14 +6,29 @@ param(
   [string]$Body = ''
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
 $nonce = [guid]::NewGuid().ToString()
 $requestId = [guid]::NewGuid().ToString()
+
 $sha = [System.Security.Cryptography.SHA256]::Create()
-$bodyHash = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Body)) | ForEach-Object { $_.ToString('x2') }) -join '')
+try {
+  $bodyHash = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Body)) | ForEach-Object { $_.ToString('x2') }) -join '')
+} finally {
+  $sha.Dispose()
+}
+
 $canonical = @($Method.ToUpper(), $PathAndQuery, $timestamp, $nonce, $requestId, $bodyHash, $KeyId) -join "`n"
-$hmac = New-Object System.Security.Cryptography.HMACSHA256([Text.Encoding]::UTF8.GetBytes($Secret))
-$signature = [Convert]::ToBase64String($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))).TrimEnd('=').Replace('+','-').Replace('/','_')
+$secretBytes = [Text.Encoding]::UTF8.GetBytes($Secret)
+$hmac = [System.Security.Cryptography.HMACSHA256]::new($secretBytes)
+try {
+  $signatureBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))
+  $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+} finally {
+  $hmac.Dispose()
+}
 
 [pscustomobject]@{
   KeyId = $KeyId
