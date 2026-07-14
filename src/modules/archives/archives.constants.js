@@ -32,4 +32,12 @@ const SORT_SQL = Object.freeze({
   '-assessor': 'documents.Assessor DESC, documents.Prop DESC, documents.DocumentID DESC',
   locationCode: 'documents.LocationCode ASC, documents.Prop ASC, documents.DocumentID ASC',
   '-locationCode': 'documents.LocationCode DESC, documents.Prop DESC, documents.DocumentID DESC',
-  propMasterId: 'documents.Prop
+  propMasterId: 'documents.PropMasterID ASC, documents.Prop ASC, documents.DocumentID ASC',
+  '-propMasterId': 'documents.PropMasterID DESC, documents.Prop DESC, documents.DocumentID DESC',
+  collectorId: 'documents.CollectorID ASC, documents.Prop ASC, documents.DocumentID ASC',
+  '-collectorId': 'documents.CollectorID DESC, documents.Prop DESC, documents.DocumentID DESC',
+  documentId: 'documents.DocumentID ASC',
+  '-documentId': 'documents.DocumentID DESC',
+});
+
+module.exports = { FILTER_NAMES, SORT_SQL };
