@@ -1,10 +1,10 @@
 param(
-  [Parameter(Mandatory=$true)][string]$BaseUrl,
-  [Parameter(Mandatory=$true)][string]$Secret,
-  [Parameter(Mandatory=$true)][string]$PdfPath,
-  [Parameter(Mandatory=$true)][string]$SummaryId,
-  [Parameter(Mandatory=$true)][int]$ClientId,
-  [Parameter(Mandatory=$true)][int]$CurrentYear,
+  [Parameter(Mandatory = $true)][string]$BaseUrl,
+  [Parameter(Mandatory = $true)][string]$Secret,
+  [Parameter(Mandatory = $true)][string]$PdfPath,
+  [Parameter(Mandatory = $true)][string]$SummaryId,
+  [Parameter(Mandatory = $true)][int]$ClientId,
+  [Parameter(Mandatory = $true)][int]$CurrentYear,
   [string]$KeyId = 'pvs-web2',
   [string]$OutputPath = '.\downloaded-summary.pdf'
 )
@@ -12,7 +12,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $PdfPath))
+$resolvedPdfPath = (Resolve-Path -LiteralPath $PdfPath).Path
+$bytes = [System.IO.File]::ReadAllBytes($resolvedPdfPath)
 $sha = [System.Security.Cryptography.SHA256]::Create()
 try {
   $bodyHash = (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
@@ -21,10 +22,10 @@ try {
   $sha.Dispose()
 }
 
-$pathAndQuery = "/v1/generated-reports/$SummaryId?clientId=$ClientId&currentYear=$CurrentYear"
+$pathAndQuery = '/v1/generated-reports/' + $SummaryId + '?clientId=' + $ClientId + '&currentYear=' + $CurrentYear
 
 function New-SignedHeaders([string]$Method, [string]$Hash) {
-  $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
+  $timestamp = (([DateTimeOffset]::UtcNow).ToUnixTimeSeconds()).ToString()
   $nonce = [guid]::NewGuid().ToString()
   $requestId = [guid]::NewGuid().ToString()
   $canonical = @($Method.ToUpper(), $pathAndQuery, $timestamp, $nonce, $requestId, $Hash, $KeyId) -join "`n"
@@ -32,7 +33,7 @@ function New-SignedHeaders([string]$Method, [string]$Hash) {
   $hmac = [System.Security.Cryptography.HMACSHA256]::new($secretBytes)
   try {
     $signatureBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))
-    $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+    $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
   } finally {
     $hmac.Dispose()
   }
@@ -47,10 +48,11 @@ function New-SignedHeaders([string]$Method, [string]$Hash) {
 }
 
 $uploadHeaders = New-SignedHeaders 'PUT' $bodyHash
-$uploadHeaders['X-PVS-File-Name'] = [System.IO.Path]::GetFileName($PdfPath)
+$uploadHeaders['X-PVS-File-Name'] = [System.IO.Path]::GetFileName($resolvedPdfPath)
 $upload = Invoke-RestMethod -Method Put -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $uploadHeaders -ContentType 'application/pdf' -Body $bytes -ErrorAction Stop
 $upload | ConvertTo-Json -Depth 5
 
 $downloadHeaders = New-SignedHeaders 'GET' $emptyHash
-Invoke-WebRequest -Method Get -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $downloadHeaders -OutFile $OutputPath -UseBasicParsing -ErrorAction Stop
-Write-Host "Downloaded report to $OutputPath"
+$resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+Invoke-WebRequest -Method Get -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $downloadHeaders -OutFile $resolvedOutputPath -UseBasicParsing -ErrorAction Stop
+Write-Host "Downloaded report to $resolvedOutputPath"
