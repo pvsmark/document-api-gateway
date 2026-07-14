@@ -9,7 +9,7 @@ const app = createApp({ config, logger });
 const server = http.createServer(app);
 let shuttingDown = false;
 
-server.requestTimeout = 120000;
+server.requestTimeout = 0;
 server.headersTimeout = 65000;
 server.keepAliveTimeout = 5000;
 
@@ -31,6 +31,7 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   app.locals.isShuttingDown = true;
+  app.locals.archiveQueue?.close();
   logger.info('shutdown_started', { signal });
 
   const timer = setTimeout(() => {
