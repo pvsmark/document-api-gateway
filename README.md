@@ -28,12 +28,39 @@ npm start
 ## Storage roots
 
 ```env
-DOCUMENT_SOURCE_ROOT=\\fs2\public\PTS Share\Client Services
+DOCUMENT_SOURCE_ROOT=\\fs2\public\PTS Share
 GENERATED_REPORT_ROOT=\\fs2\public\PTS Share\Client Services\AI Summaries
 DOCUMENT_TEMP_ROOT=./temp
 ```
 
-Normal source documents remain read-only on FS2. Temporary ZIP files are created only under the project-local temp root. AI summaries are written only under the separate generated-report root using deterministic client/year/summary-ID paths.
+Normal source documents remain read-only under the broader PTS Share root. Temporary ZIP files are created only under the project-local temp root. AI summaries are written only under the separate generated-report root using deterministic client/year/summary-ID paths.
+
+Database source-path procedures may return paths such as:
+
+```text
+O:\Clients\...\document.pdf
+```
+
+or the equivalent relative value:
+
+```text
+Clients\...\document.pdf
+```
+
+The gateway never depends on the mapped drive. It resolves the database-provided relative path under `DOCUMENT_SOURCE_ROOT` and enforces root containment before reading the file.
+
+## Database authorization model
+
+The gateway currently uses the fixed SQL Anywhere account configured by `DB_UID` and `DB_PWD`.
+
+`Web2_WebDocumentListView` contains a `Web.UserID = CURRENT USER` condition. Therefore, the configured database account can see only the clients assigned to that SQL Anywhere login in `tso.WebClientAccess`.
+
+Do not send a browser JWT, `dbCode`, decrypted user password, or a connection string to the gateway. Before production integration, use one of these approved models:
+
+1. Give the dedicated gateway SQL account only the required client access in `tso.WebClientAccess`; or
+2. Add gateway-specific SQL procedures/views that accept a signed requesting-user identity and perform an explicit `WebClientAccess` authorization check.
+
+The second model is preferred when the gateway must serve many users while retaining one dedicated, poolable database account. Dynamic end-user database passwords are not accepted by the gateway.
 
 ## Endpoints
 
@@ -110,6 +137,17 @@ npm test
 ```
 
 Tests cover service authentication, document path containment, ZIP64, queue controls, client-scoped archive queries, supported filters and sorts, PDF validation, deterministic generated-report paths, streamed writes, staging cleanup, hash verification, idempotent retry, conflict handling, retrieval, and safe missing-file errors.
+
+For a signed local single-document test:
+
+```powershell
+.\scripts\test-document.ps1 `
+  -Secret $secret `
+  -ClientId 29 `
+  -DocumentId 8789469 `
+  -BaseUrl "http://127.0.0.1:3100" `
+  -OutputPath ".\downloaded-document.pdf"
+```
 
 ## Phase status
 
