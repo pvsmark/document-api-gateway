@@ -7,16 +7,31 @@ param(
   [string]$OutputPath = '.\document-download.bin'
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $pathAndQuery = "/v1/documents/$DocumentId?clientId=$ClientId"
 $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
 $nonce = [guid]::NewGuid().ToString()
 $requestId = [guid]::NewGuid().ToString()
+
 $sha = [System.Security.Cryptography.SHA256]::Create()
-$emptyBytes = New-Object byte[] 0
-$bodyHash = (($sha.ComputeHash($emptyBytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+try {
+  $emptyBytes = New-Object byte[] 0
+  $bodyHash = (($sha.ComputeHash($emptyBytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+} finally {
+  $sha.Dispose()
+}
+
 $canonical = @('GET', $pathAndQuery, $timestamp, $nonce, $requestId, $bodyHash, $KeyId) -join "`n"
-$hmac = New-Object System.Security.Cryptography.HMACSHA256([Text.Encoding]::UTF8.GetBytes($Secret))
-$signature = [Convert]::ToBase64String($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))).TrimEnd('=').Replace('+','-').Replace('/','_')
+$secretBytes = [Text.Encoding]::UTF8.GetBytes($Secret)
+$hmac = [System.Security.Cryptography.HMACSHA256]::new($secretBytes)
+try {
+  $signatureBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))
+  $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+} finally {
+  $hmac.Dispose()
+}
 
 $headers = @{
   'X-PVS-Key-Id' = $KeyId
@@ -27,6 +42,6 @@ $headers = @{
   'X-PVS-Signature' = $signature
 }
 
-Invoke-WebRequest -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Method Get -Headers $headers -OutFile $OutputPath -UseBasicParsing
+Invoke-WebRequest -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Method Get -Headers $headers -OutFile $OutputPath -UseBasicParsing -ErrorAction Stop
 Write-Host "Document saved to $OutputPath"
 Write-Host "Request ID: $requestId"
