@@ -3,7 +3,7 @@ const { createHttpError } = require('../utils/httpError');
 
 function formatConnectionValue(value) {
   const text = String(value);
-  return /[;{}]/.test(text) ? `{${text.replace(/}/g, '}}')}}` : text;
+  return /[;{}]/.test(text) ? '{' + text.replace(/}/g, '}}') + '}' : text;
 }
 
 function createDatabase(config, logger) {
