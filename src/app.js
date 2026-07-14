@@ -5,6 +5,7 @@ const { createIpAllowlistMiddleware } = require('./middleware/ipAllowlist.middle
 const { createServiceAuthMiddleware } = require('./middleware/serviceAuth.middleware');
 const { createErrorHandler, notFound } = require('./middleware/error.middleware');
 const { createRequestLoggingMiddleware } = require('./middleware/requestLogging.middleware');
+const { createDocumentsRouter } = require('./modules/documents/documents.routes');
 const asyncHandler = require('./utils/asyncHandler');
 const { createHttpError } = require('./utils/httpError');
 const { createLogger } = require('./utils/logger');
@@ -70,6 +71,15 @@ function createApp(options = {}) {
     if (app.locals.isShuttingDown) return next(createHttpError(503, 'Service is shutting down.', 'SERVICE_SHUTTING_DOWN'));
     return next();
   });
+
+  v1.use('/documents', createDocumentsRouter({
+    config,
+    database,
+    logger,
+    repository: options.documentsRepository,
+    storage: options.documentsStorage,
+    service: options.documentsService,
+  }));
 
   if (typeof options.configureV1Routes === 'function') options.configureV1Routes(v1);
   app.use('/v1', v1);
