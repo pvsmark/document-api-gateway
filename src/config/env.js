@@ -64,11 +64,23 @@ function loadConfig(source = process.env) {
       poolInitialSize: positiveInteger('DB_POOL_INITIAL_SIZE', source.DB_POOL_INITIAL_SIZE, 1),
       poolIncrementSize: positiveInteger('DB_POOL_INCREMENT_SIZE', source.DB_POOL_INCREMENT_SIZE, 1),
       poolMaxSize: positiveInteger('DB_POOL_MAX_SIZE', source.DB_POOL_MAX_SIZE, 3),
+      connectionAuthentication: String(source.DB_CONNECTION_AUTHENTICATION || ''),
     },
     storage: {
       documentSourceRoot: path.win32.normalize(sourceRoot),
       generatedReportRoot: path.win32.normalize(reportRoot),
       tempRoot,
+    },
+    zip: {
+      concurrency: positiveInteger('ZIP_CONCURRENCY', source.ZIP_CONCURRENCY, 1),
+      maxQueueLength: positiveInteger('ZIP_MAX_QUEUE_LENGTH', source.ZIP_MAX_QUEUE_LENGTH, 5),
+      queueTimeoutMs: positiveInteger('ZIP_QUEUE_TIMEOUT_MS', source.ZIP_QUEUE_TIMEOUT_MS, 30000),
+      idleTimeoutMs: positiveInteger('ZIP_IDLE_TIMEOUT_MS', source.ZIP_IDLE_TIMEOUT_MS, 120000),
+      minFreeDiskBytes: positiveInteger('ZIP_MIN_FREE_DISK_BYTES', source.ZIP_MIN_FREE_DISK_BYTES, 5368709120),
+      queryPageSize: positiveInteger('ZIP_QUERY_PAGE_SIZE', source.ZIP_QUERY_PAGE_SIZE, 100),
+    },
+    generatedReports: {
+      maxBytes: positiveInteger('GENERATED_REPORT_MAX_BYTES', source.GENERATED_REPORT_MAX_BYTES, 26214400),
     },
     shutdownTimeoutMs: positiveInteger('SHUTDOWN_TIMEOUT_MS', source.SHUTDOWN_TIMEOUT_MS, 30000),
     staleTempMaxAgeHours: positiveInteger('STALE_TEMP_MAX_AGE_HOURS', source.STALE_TEMP_MAX_AGE_HOURS, 24),
