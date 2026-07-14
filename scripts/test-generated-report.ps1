@@ -9,9 +9,18 @@ param(
   [string]$OutputPath = '.\downloaded-summary.pdf'
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $PdfPath))
 $sha = [System.Security.Cryptography.SHA256]::Create()
-$bodyHash = (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+try {
+  $bodyHash = (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+  $emptyHash = (($sha.ComputeHash([byte[]]@()) | ForEach-Object { $_.ToString('x2') }) -join '')
+} finally {
+  $sha.Dispose()
+}
+
 $pathAndQuery = "/v1/generated-reports/$SummaryId?clientId=$ClientId&currentYear=$CurrentYear"
 
 function New-SignedHeaders([string]$Method, [string]$Hash) {
@@ -19,8 +28,14 @@ function New-SignedHeaders([string]$Method, [string]$Hash) {
   $nonce = [guid]::NewGuid().ToString()
   $requestId = [guid]::NewGuid().ToString()
   $canonical = @($Method.ToUpper(), $pathAndQuery, $timestamp, $nonce, $requestId, $Hash, $KeyId) -join "`n"
-  $hmac = New-Object System.Security.Cryptography.HMACSHA256([Text.Encoding]::UTF8.GetBytes($Secret))
-  $signature = [Convert]::ToBase64String($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))).TrimEnd('=').Replace('+','-').Replace('/','_')
+  $secretBytes = [Text.Encoding]::UTF8.GetBytes($Secret)
+  $hmac = [System.Security.Cryptography.HMACSHA256]::new($secretBytes)
+  try {
+    $signatureBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))
+    $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+  } finally {
+    $hmac.Dispose()
+  }
   return @{
     'X-PVS-Key-Id' = $KeyId
     'X-PVS-Timestamp' = $timestamp
@@ -33,10 +48,9 @@ function New-SignedHeaders([string]$Method, [string]$Hash) {
 
 $uploadHeaders = New-SignedHeaders 'PUT' $bodyHash
 $uploadHeaders['X-PVS-File-Name'] = [System.IO.Path]::GetFileName($PdfPath)
-$upload = Invoke-RestMethod -Method Put -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $uploadHeaders -ContentType 'application/pdf' -Body $bytes
+$upload = Invoke-RestMethod -Method Put -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $uploadHeaders -ContentType 'application/pdf' -Body $bytes -ErrorAction Stop
 $upload | ConvertTo-Json -Depth 5
 
-$emptyHash = (($sha.ComputeHash([byte[]]@()) | ForEach-Object { $_.ToString('x2') }) -join '')
 $downloadHeaders = New-SignedHeaders 'GET' $emptyHash
-Invoke-WebRequest -Method Get -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $downloadHeaders -OutFile $OutputPath
+Invoke-WebRequest -Method Get -Uri ($BaseUrl.TrimEnd('/') + $pathAndQuery) -Headers $downloadHeaders -OutFile $OutputPath -UseBasicParsing -ErrorAction Stop
 Write-Host "Downloaded report to $OutputPath"
