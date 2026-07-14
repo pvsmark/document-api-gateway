@@ -7,6 +7,7 @@ const { createErrorHandler, notFound } = require('./middleware/error.middleware'
 const { createRequestLoggingMiddleware } = require('./middleware/requestLogging.middleware');
 const { createDocumentsRouter } = require('./modules/documents/documents.routes');
 const { createArchivesModule } = require('./modules/archives/archives.routes');
+const { createGeneratedReportsRouter } = require('./modules/generatedReports/generatedReports.routes');
 const asyncHandler = require('./utils/asyncHandler');
 const { createHttpError } = require('./utils/httpError');
 const { createLogger } = require('./utils/logger');
@@ -94,6 +95,15 @@ function createApp(options = {}) {
   app.locals.archiveQueue = archives.queue;
   app.locals.archivesService = archives.service;
   v1.use('/document-archives', archives.router);
+
+  const generatedReports = createGeneratedReportsRouter({
+    config,
+    logger,
+    storage: options.generatedReportsStorage,
+    service: options.generatedReportsService,
+  });
+  app.locals.generatedReportsService = generatedReports.service;
+  v1.use('/generated-reports', generatedReports.router);
 
   if (typeof options.configureV1Routes === 'function') options.configureV1Routes(v1);
   app.use('/v1', v1);
