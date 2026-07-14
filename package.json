@@ -1,0 +1,30 @@
+{
+  "name": "pvs-document-api",
+  "version": "0.1.0",
+  "description": "Internal PVS document API gateway for secure LAN file access.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node --test",
+    "test:watch": "node --test --watch"
+  },
+  "keywords": [
+    "pvs",
+    "document-api",
+    "internal-gateway"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "odbc": "^2.4.9"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}
