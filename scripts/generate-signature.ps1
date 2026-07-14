@@ -1,5 +1,5 @@
 param(
-  [Parameter(Mandatory=$true)][string]$Secret,
+  [Parameter(Mandatory = $true)][string]$Secret,
   [string]$Method = 'GET',
   [string]$PathAndQuery = '/health/live',
   [string]$KeyId = 'pvs-web2',
@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
+$timestamp = (([DateTimeOffset]::UtcNow).ToUnixTimeSeconds()).ToString()
 $nonce = [guid]::NewGuid().ToString()
 $requestId = [guid]::NewGuid().ToString()
 
@@ -25,7 +25,7 @@ $secretBytes = [Text.Encoding]::UTF8.GetBytes($Secret)
 $hmac = [System.Security.Cryptography.HMACSHA256]::new($secretBytes)
 try {
   $signatureBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))
-  $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+  $signature = [Convert]::ToBase64String($signatureBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 } finally {
   $hmac.Dispose()
 }
