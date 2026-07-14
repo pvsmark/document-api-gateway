@@ -1,6 +1,6 @@
 {
   "name": "pvs-document-api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Internal PVS document API gateway for secure LAN file access.",
   "main": "src/server.js",
   "type": "commonjs",
