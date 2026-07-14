@@ -2,10 +2,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const http = require('http');
-const { createApp } = require('../src/app');
-const { loadConfig } = require('../src/config/env');
-const { hmacSha256Base64Url, sha256Hex } = require('../src/utils/crypto');
-const { createLogger } = require('../src/utils/logger');
 
 const SECRET = 'test-secret-that-is-at-least-thirty-two-characters';
 
@@ -28,12 +24,15 @@ function environment() {
   };
 }
 
+Object.assign(process.env, environment());
+
+const { createApp } = require('../src/app');
+const { loadConfig } = require('../src/config/env');
+const { hmacSha256Base64Url, sha256Hex } = require('../src/utils/crypto');
+const { createLogger } = require('../src/utils/logger');
+
 function config() {
-  return {
-    ...loadConfig(environment()),
-    port: 0,
-    logLevel: 'silent',
-  };
+  return { ...loadConfig(environment()), port: 0, logLevel: 'silent' };
 }
 
 async function startServer() {
@@ -99,8 +98,7 @@ test('health endpoints return safe status only', async (t) => {
 test('valid signed request is accepted', async (t) => {
   const service = await startServer();
   t.after(service.close);
-  const response = await fetch(`${service.baseUrl}/v1/test`, { headers: signedHeaders() });
-  assert.equal(response.status, 200);
+  assert.equal((await fetch(`${service.baseUrl}/v1/test`, { headers: signedHeaders() })).status, 200);
 });
 
 test('changed query invalidates signature', async (t) => {
