@@ -2,7 +2,7 @@
 
 A lightweight Node.js service that runs inside the PVS LAN and provides controlled document access to the existing PVS-Web2 backend.
 
-Phases 1–3 provide the secured service foundation, single-document streaming, selected-document ZIP creation, and ZIP All with ZIP64.
+Phases 1–4 provide the secured service foundation, single-document streaming, selected-document ZIP creation, ZIP All with ZIP64, and filtered batch-compatible archives.
 
 ## Architecture
 
@@ -47,9 +47,16 @@ POST /v1/document-archives/query
 
 Every `/v1` route requires caller-IP allowlisting and HMAC authentication.
 
-The selected archive endpoint rejects the entire request when any document does not belong to the supplied client. The query endpoint performs ZIP All when `offset` and `limit` are omitted.
+The selected archive endpoint rejects the entire request when any document does not belong to the supplied client.
 
-ZIP All:
+The query endpoint supports two modes:
+
+- omit `offset` and `limit` for ZIP All;
+- provide both `offset` and `limit` for one validated batch window.
+
+Supported filters and sort names match the existing main backend. Unknown filters and arbitrary sort expressions are rejected. Every database query is client-scoped and filter values remain bound parameters.
+
+ZIP creation:
 
 - uses ZIP64;
 - reads SQL Anywhere rows in pages;
@@ -60,7 +67,16 @@ ZIP All:
 - records unavailable files in a safe `failed-documents.json`;
 - deletes temporary work after delivery or failure.
 
-See [Phase 3 archive documentation](docs/phase-3-archives.md).
+See:
+
+- [Phase 3 archive documentation](docs/phase-3-archives.md)
+- [Phase 4 filtered and batch documentation](docs/phase-4-filtered-batch.md)
+
+## Main-backend compatibility
+
+The existing main backend remains responsible for user JWT validation, client authorization, and signed, expiring, user-bound batch tokens. After it validates a batch token, it sends the resolved filters, sort, offset, and limit to this gateway.
+
+The gateway does not create or validate browser batch tokens. No frontend or batch-token format change is required.
 
 ## Tests
 
@@ -68,14 +84,14 @@ See [Phase 3 archive documentation](docs/phase-3-archives.md).
 npm test
 ```
 
-Phase 3 unit tests cover ZIP64 configuration, more than 65,535 synthetic entries, duplicate names, queue capacity and timeout, unauthorized selected IDs, paged ZIP All retrieval, missing-file reports, empty archives, disk reserve failure, and cleanup.
+Tests cover ZIP64 configuration, more than 65,535 synthetic entries, duplicate names, queue controls, client-scoped queries, every supported filter and sort, wildcard escaping, parameterized SQL, ZIP All paging, stable batch windows, missing-file reports, empty archives, disk reserve failure, and cleanup.
 
 ## Phase status
 
 - [x] Phase 1: skeleton and service security
 - [x] Phase 2: single-document streaming
 - [x] Phase 3: selected ZIP and ZIP All
-- [ ] Phase 4: filtered and batch ZIP
+- [x] Phase 4: filtered and batch ZIP
 - [ ] Phase 5: generated AI reports
 - [ ] Phase 6: main-backend integration
 - [ ] Phase 7: production hardening
