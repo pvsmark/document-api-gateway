@@ -2,7 +2,7 @@
 
 A lightweight Node.js service that runs inside the PVS LAN and provides controlled document access to the existing PVS-Web2 backend.
 
-Phases 1–4 provide the secured service foundation, single-document streaming, selected-document ZIP creation, ZIP All with ZIP64, and filtered batch-compatible archives.
+Phases 1–5 provide the secured service foundation, single-document streaming, selected-document ZIP creation, ZIP All with ZIP64, filtered batch-compatible archives, and AI-generated PDF storage and retrieval.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ GENERATED_REPORT_ROOT=\\fs2\public\PTS Share\Client Services\AI Summaries
 DOCUMENT_TEMP_ROOT=./temp
 ```
 
-Source documents remain on FS2. Temporary ZIP files are created only under the project-local temp root.
+Normal source documents remain read-only on FS2. Temporary ZIP files are created only under the project-local temp root. AI summaries are written only under the separate generated-report root using deterministic client/year/summary-ID paths.
 
 ## Endpoints
 
@@ -43,9 +43,13 @@ GET  /health/ready
 GET  /v1/documents/:documentId?clientId=<clientId>
 POST /v1/document-archives/selected
 POST /v1/document-archives/query
+PUT  /v1/generated-reports/:summaryId?clientId=<clientId>&currentYear=<year>
+GET  /v1/generated-reports/:summaryId?clientId=<clientId>&currentYear=<year>
 ```
 
 Every `/v1` route requires caller-IP allowlisting and HMAC authentication.
+
+## Archives
 
 The selected archive endpoint rejects the entire request when any document does not belong to the supplied client.
 
@@ -67,16 +71,37 @@ ZIP creation:
 - records unavailable files in a safe `failed-documents.json`;
 - deletes temporary work after delivery or failure.
 
+## AI-generated reports
+
+The upload endpoint accepts a raw `application/pdf` stream. It validates the UUID, client, year, caller filename, declared length, PDF header, and SHA-256 hash while writing to a staging file.
+
+The physical filename is always:
+
+```text
+<GENERATED_REPORT_ROOT>\<clientId>\<currentYear>\<summaryId>.pdf
+```
+
+The caller filename is never used for storage. Successful responses return a relative path only and never expose the UNC root.
+
+Existing-file behavior:
+
+- same hash and size: safe idempotent retry;
+- different content for the same summary ID: `409 GENERATED_REPORT_ALREADY_EXISTS`;
+- no report-delete endpoint.
+
+Retrieval derives the file location only from validated IDs and streams the PDF back to PVS-Web2. The main backend remains responsible for public `Content-Disposition` and display filenames.
+
 See:
 
 - [Phase 3 archive documentation](docs/phase-3-archives.md)
 - [Phase 4 filtered and batch documentation](docs/phase-4-filtered-batch.md)
+- [Phase 5 generated-report documentation](docs/phase-5-generated-reports.md)
 
 ## Main-backend compatibility
 
 The existing main backend remains responsible for user JWT validation, client authorization, and signed, expiring, user-bound batch tokens. After it validates a batch token, it sends the resolved filters, sort, offset, and limit to this gateway.
 
-The gateway does not create or validate browser batch tokens. No frontend or batch-token format change is required.
+For AI summaries, the main backend or worker will upload the generated PDF through the gateway and store the returned relative path, file size, and hash in its existing database record. PVS-Web2 does not require write access to FS2.
 
 ## Tests
 
@@ -84,7 +109,7 @@ The gateway does not create or validate browser batch tokens. No frontend or bat
 npm test
 ```
 
-Tests cover ZIP64 configuration, more than 65,535 synthetic entries, duplicate names, queue controls, client-scoped queries, every supported filter and sort, wildcard escaping, parameterized SQL, ZIP All paging, stable batch windows, missing-file reports, empty archives, disk reserve failure, and cleanup.
+Tests cover service authentication, document path containment, ZIP64, queue controls, client-scoped archive queries, supported filters and sorts, PDF validation, deterministic generated-report paths, streamed writes, staging cleanup, hash verification, idempotent retry, conflict handling, retrieval, and safe missing-file errors.
 
 ## Phase status
 
@@ -92,6 +117,6 @@ Tests cover ZIP64 configuration, more than 65,535 synthetic entries, duplicate n
 - [x] Phase 2: single-document streaming
 - [x] Phase 3: selected ZIP and ZIP All
 - [x] Phase 4: filtered and batch ZIP
-- [ ] Phase 5: generated AI reports
+- [x] Phase 5: generated AI reports
 - [ ] Phase 6: main-backend integration
 - [ ] Phase 7: production hardening
