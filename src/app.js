@@ -6,6 +6,7 @@ const { createServiceAuthMiddleware } = require('./middleware/serviceAuth.middle
 const { createErrorHandler, notFound } = require('./middleware/error.middleware');
 const { createRequestLoggingMiddleware } = require('./middleware/requestLogging.middleware');
 const { createDocumentsRouter } = require('./modules/documents/documents.routes');
+const { createArchivesModule } = require('./modules/archives/archives.routes');
 const asyncHandler = require('./utils/asyncHandler');
 const { createHttpError } = require('./utils/httpError');
 const { createLogger } = require('./utils/logger');
@@ -80,6 +81,19 @@ function createApp(options = {}) {
     storage: options.documentsStorage,
     service: options.documentsService,
   }));
+
+  const archives = createArchivesModule({
+    config,
+    database,
+    logger,
+    queue: options.archiveQueue,
+    repository: options.archivesRepository,
+    storage: options.archivesStorage,
+    service: options.archivesService,
+  });
+  app.locals.archiveQueue = archives.queue;
+  app.locals.archivesService = archives.service;
+  v1.use('/document-archives', archives.router);
 
   if (typeof options.configureV1Routes === 'function') options.configureV1Routes(v1);
   app.use('/v1', v1);
