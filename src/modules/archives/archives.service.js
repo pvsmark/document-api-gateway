@@ -92,12 +92,12 @@ function createArchivesService({ config, repository, storage, queue, logger, arc
     }
   }
 
-  async function selectedRowsProvider(filters) {
+  async function selectedRowsProvider(filters, dbCredentials) {
     const pageSize = config.zip.queryPageSize;
     const documents = [];
     for (let index = 0; index < filters.documentIds.length; index += pageSize) {
       const ids = filters.documentIds.slice(index, index + pageSize);
-      documents.push(...await repository.findSelectedDocuments(filters.clientId, ids));
+      documents.push(...await repository.findSelectedDocuments(filters.clientId, ids, dbCredentials));
     }
     const found = new Set(documents.map((row) => Number(row.DocumentID)));
     const missing = filters.documentIds.filter((id) => !found.has(Number(id)));
@@ -108,7 +108,7 @@ function createArchivesService({ config, repository, storage, queue, logger, arc
     const sourceRows = [];
     for (let index = 0; index < filters.documentIds.length; index += pageSize) {
       const ids = filters.documentIds.slice(index, index + pageSize);
-      sourceRows.push(...await repository.findSourcePaths(filters.clientId, ids));
+      sourceRows.push(...await repository.findSourcePaths(filters.clientId, ids, dbCredentials));
     }
     const sourceMap = new Map(sourceRows.map((row) => [numberField(row, ['DocumentID']), row]));
     const documentMap = new Map(documents.map((row) => [Number(row.DocumentID), row]));
@@ -123,7 +123,7 @@ function createArchivesService({ config, repository, storage, queue, logger, arc
     };
   }
 
-  function queryRowsProvider(filters) {
+  function queryRowsProvider(filters, dbCredentials) {
     return async function* provider() {
       const pageSize = config.zip.queryPageSize;
       const startOffset = filters.offset || 0;
@@ -137,10 +137,10 @@ function createArchivesService({ config, repository, storage, queue, logger, arc
           sortSql: filters.sortSql,
           offset: pageOffset,
           limit: remaining,
-        });
+        }, dbCredentials);
         if (!documents.length) break;
         const ids = documents.map((row) => Number(row.DocumentID));
-        const sourceRows = await repository.findSourcePaths(filters.clientId, ids);
+        const sourceRows = await repository.findSourcePaths(filters.clientId, ids, dbCredentials);
         const sourceMap = new Map(sourceRows.map((row) => [numberField(row, ['DocumentID']), row]));
         for (const documentRecord of documents) {
           yield {
@@ -156,11 +156,11 @@ function createArchivesService({ config, repository, storage, queue, logger, arc
 
   return {
     async createSelectedArchive(filters, context) {
-      const provider = await selectedRowsProvider(filters);
+      const provider = await selectedRowsProvider(filters, context.dbCredentials);
       return buildArchive({ ...context, rowsProvider: provider });
     },
     createQueryArchive(filters, context) {
-      return buildArchive({ ...context, rowsProvider: queryRowsProvider(filters) });
+      return buildArchive({ ...context, rowsProvider: queryRowsProvider(filters, context.dbCredentials) });
     },
     async cleanup(descriptor) {
       await storage.cleanup(descriptor && descriptor.cleanupPath);

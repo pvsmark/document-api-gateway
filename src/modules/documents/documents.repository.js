@@ -1,7 +1,16 @@
+function runQuery(database, dbCredentials, statement, params) {
+  if (dbCredentials && typeof database.queryAs === 'function') {
+    return database.queryAs(dbCredentials, statement, params);
+  }
+  return database.query(statement, params);
+}
+
 function createDocumentsRepository(database) {
   return {
-    async findDocumentById(clientId, documentId) {
-      const rows = await database.query(
+    async findDocumentById(clientId, documentId, dbCredentials) {
+      const rows = await runQuery(
+        database,
+        dbCredentials,
         `
           SELECT TOP 1
             DocumentID,
@@ -17,8 +26,10 @@ function createDocumentsRepository(database) {
       return Array.isArray(rows) ? rows[0] || null : null;
     },
 
-    async findDocumentSourcePath(documentId) {
-      const rows = await database.query(
+    async findDocumentSourcePath(documentId, dbCredentials) {
+      const rows = await runQuery(
+        database,
+        dbCredentials,
         'CALL "tso"."Web2_GetDocumentSourcePath"(?)',
         [documentId],
       );

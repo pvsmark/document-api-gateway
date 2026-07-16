@@ -17,6 +17,22 @@ function positiveInteger(name, value, fallback) {
   return parsed;
 }
 
+// PHASE6_OPTION_A_CONFIG
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return ['true', '1', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function optionalBase64Key(name, value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const key = Buffer.from(text, 'base64');
+  if (key.length !== 32 || key.toString('base64').replace(/=+$/, '') !== text.replace(/=+$/, '')) {
+    throw new Error(`${name} must be a base64-encoded 32-byte key.`);
+  }
+  return key;
+}
+
 function loadConfig(source = process.env) {
   const keys = JSON.parse(requireValue('SERVICE_AUTH_KEYS_JSON', source.SERVICE_AUTH_KEYS_JSON));
   for (const [keyId, secret] of Object.entries(keys)) {
@@ -39,6 +55,14 @@ function loadConfig(source = process.env) {
 
   const allowedCallerIps = requireValue('ALLOWED_CALLER_IPS', source.ALLOWED_CALLER_IPS)
     .split(',').map((value) => value.trim()).filter(Boolean);
+  const delegatedDbContextEnabled = parseBoolean(source.DELEGATED_DB_CONTEXT_ENABLED, false);
+  const delegatedDbContextKey = optionalBase64Key(
+    'DELEGATED_DB_CONTEXT_KEY',
+    source.DELEGATED_DB_CONTEXT_KEY,
+  );
+  if (delegatedDbContextEnabled && !delegatedDbContextKey) {
+    throw new Error('DELEGATED_DB_CONTEXT_KEY is required when delegated database context is enabled.');
+  }
 
   return {
     projectRoot: PROJECT_ROOT,
@@ -53,6 +77,12 @@ function loadConfig(source = process.env) {
       nonceTtlSeconds: positiveInteger('SERVICE_AUTH_NONCE_TTL_SECONDS', source.SERVICE_AUTH_NONCE_TTL_SECONDS, 300),
       maxNonces: positiveInteger('SERVICE_AUTH_MAX_NONCES', source.SERVICE_AUTH_MAX_NONCES, 10000),
     },
+    delegatedDbContext: {
+      enabled: delegatedDbContextEnabled,
+      key: delegatedDbContextKey,
+      maxTtlSeconds: positiveInteger('DELEGATED_DB_CONTEXT_MAX_TTL_SECONDS', source.DELEGATED_DB_CONTEXT_MAX_TTL_SECONDS, 120),
+      maxClockSkewSeconds: positiveInteger('DELEGATED_DB_CONTEXT_MAX_CLOCK_SKEW_SECONDS', source.DELEGATED_DB_CONTEXT_MAX_CLOCK_SKEW_SECONDS, 30),
+    },
     db: {
       dsn: requireValue('DB_DSN', source.DB_DSN),
       uid: requireValue('DB_UID', source.DB_UID),
@@ -64,6 +94,8 @@ function loadConfig(source = process.env) {
       poolInitialSize: positiveInteger('DB_POOL_INITIAL_SIZE', source.DB_POOL_INITIAL_SIZE, 1),
       poolIncrementSize: positiveInteger('DB_POOL_INCREMENT_SIZE', source.DB_POOL_INCREMENT_SIZE, 1),
       poolMaxSize: positiveInteger('DB_POOL_MAX_SIZE', source.DB_POOL_MAX_SIZE, 3),
+      userPoolMaxCredentialPools: positiveInteger('DB_USER_POOL_MAX_CREDENTIAL_POOLS', source.DB_USER_POOL_MAX_CREDENTIAL_POOLS, 20),
+      userPoolIdleTimeoutMs: positiveInteger('DB_USER_POOL_IDLE_TIMEOUT_MS', source.DB_USER_POOL_IDLE_TIMEOUT_MS, 300000),
       connectionAuthentication: String(source.DB_CONNECTION_AUTHENTICATION || ''),
     },
     storage: {

@@ -5,6 +5,13 @@ const DOCUMENT_COLUMNS = [
   'Ext',
 ];
 
+function runQuery(database, dbCredentials, statement, params) {
+  if (dbCredentials && typeof database.queryAs === 'function') {
+    return database.queryAs(dbCredentials, statement, params);
+  }
+  return database.query(statement, params);
+}
+
 function placeholders(values) {
   return values.map(() => '?').join(', ');
 }
@@ -58,9 +65,11 @@ function buildFilters(clientId, filters) {
 
 function createArchivesRepository(database) {
   return {
-    async findSelectedDocuments(clientId, documentIds) {
+    async findSelectedDocuments(clientId, documentIds, dbCredentials) {
       if (!documentIds.length) return [];
-      const rows = await database.query(
+      const rows = await runQuery(
+        database,
+        dbCredentials,
         `
           SELECT ${DOCUMENT_COLUMNS.join(', ')}
           FROM tso.Web2_WebDocumentListView AS documents
@@ -72,11 +81,13 @@ function createArchivesRepository(database) {
       return Array.isArray(rows) ? rows : [];
     },
 
-    async findDocumentPage({ clientId, filters, sortSql, offset, limit }) {
+    async findDocumentPage({ clientId, filters, sortSql, offset, limit }, dbCredentials) {
       const built = buildFilters(clientId, filters);
       const top = Math.max(1, Number(limit));
       const startAt = Math.max(0, Number(offset)) + 1;
-      const rows = await database.query(
+      const rows = await runQuery(
+        database,
+        dbCredentials,
         `
           SELECT TOP ${top} START AT ${startAt} ${DOCUMENT_COLUMNS.join(', ')}
           FROM tso.Web2_WebDocumentListView AS documents
@@ -88,9 +99,11 @@ function createArchivesRepository(database) {
       return Array.isArray(rows) ? rows : [];
     },
 
-    async findSourcePaths(clientId, documentIds) {
+    async findSourcePaths(clientId, documentIds, dbCredentials) {
       if (!documentIds.length) return [];
-      const rows = await database.query(
+      const rows = await runQuery(
+        database,
+        dbCredentials,
         'CALL "tso"."Web2_GetDocumentSourcePaths"(?, ?)',
         [clientId, documentIds.join(',')],
       );

@@ -34,6 +34,7 @@ function createArchivesController({ service, logger }) {
     return {
       requestId: req.requestId,
       signal: controller.signal,
+      dbCredentials: req.dbCredentials,
       cleanup() {
         req.removeListener('aborted', abort);
         res.removeListener('close', abort);

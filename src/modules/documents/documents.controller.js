@@ -4,12 +4,16 @@ function createDocumentsController({ service, logger }) {
   return {
     async streamDocument(req, res) {
       const startedAt = Date.now();
-      const descriptor = await service.getDocument(req.validated);
+      const descriptor = await service.getDocument(req.validated, req.dbCredentials);
       const source = descriptor.stream || descriptor.createReadStream();
 
       res.setHeader('Content-Type', descriptor.contentType || 'application/octet-stream');
       res.setHeader('Content-Length', String(descriptor.size));
       res.setHeader('X-PVS-Document-Id', String(descriptor.documentId));
+      res.setHeader(
+        'X-PVS-File-Name-B64',
+        Buffer.from(descriptor.displayName || 'document.bin', 'utf8').toString('base64url'),
+      );
 
       const stopSource = () => {
         if (!source.destroyed) source.destroy();

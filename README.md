@@ -2,7 +2,7 @@
 
 A lightweight Node.js service that runs inside the PVS LAN and provides controlled document access to the existing PVS-Web2 backend.
 
-Phases 1–5 provide the secured service foundation, single-document streaming, selected-document ZIP creation, ZIP All with ZIP64, filtered batch-compatible archives, and AI-generated PDF storage and retrieval.
+Phases 1â€“5 provide the secured service foundation, single-document streaming, selected-document ZIP creation, ZIP All with ZIP64, filtered batch-compatible archives, and AI-generated PDF storage and retrieval.
 
 ## Architecture
 
@@ -158,3 +158,21 @@ For a signed local single-document test:
 - [x] Phase 5: generated AI reports
 - [ ] Phase 6: main-backend integration
 - [ ] Phase 7: production hardening
+
+<!-- PHASE6_OPTION_A_DOCUMENTATION -->
+## Phase 6 delegated database context (Option A)
+
+When `DELEGATED_DB_CONTEXT_ENABLED=true`, document and archive routes require an
+`X-PVS-DB-Context` header in addition to the existing service HMAC. The main
+backend encrypts the requesting user's SQL Anywhere UID and password with
+AES-256-GCM using a separate shared 32-byte key. The encrypted context is bound
+to the internal request method, path/query, request ID, audience, issued time,
+and expiration time.
+
+The gateway decrypts credentials only in memory and runs DB-backed document
+queries under that SQL Anywhere user. This preserves
+`Web.UserID = CURRENT USER` behavior in `Web2_WebDocumentListView`.
+
+Never log the delegated context, database UID, database password, decrypted
+payload, credential fingerprint, or connection string. Use HTTPS between the
+main backend and gateway even though the context is encrypted.

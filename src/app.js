@@ -3,6 +3,7 @@ const { createDatabase } = require('./db/odbc');
 const { requestIdMiddleware } = require('./middleware/requestId.middleware');
 const { createIpAllowlistMiddleware } = require('./middleware/ipAllowlist.middleware');
 const { createServiceAuthMiddleware } = require('./middleware/serviceAuth.middleware');
+const { createDelegatedDbContextMiddleware } = require('./middleware/dbContext.middleware');
 const { createErrorHandler, notFound } = require('./middleware/error.middleware');
 const { createRequestLoggingMiddleware } = require('./middleware/requestLogging.middleware');
 const { createDocumentsRouter } = require('./modules/documents/documents.routes');
@@ -69,12 +70,14 @@ function createApp(options = {}) {
     verify(req, res, buffer) { req.rawBody = Buffer.from(buffer); },
   }));
   v1.use(createServiceAuthMiddleware(config, options));
+  // PHASE6_OPTION_A_DB_CONTEXT
+  const delegatedDbContext = createDelegatedDbContextMiddleware(config, options);
   v1.use((req, res, next) => {
     if (app.locals.isShuttingDown) return next(createHttpError(503, 'Service is shutting down.', 'SERVICE_SHUTTING_DOWN'));
     return next();
   });
 
-  v1.use('/documents', createDocumentsRouter({
+  v1.use('/documents', delegatedDbContext, createDocumentsRouter({
     config,
     database,
     logger,
@@ -94,7 +97,7 @@ function createApp(options = {}) {
   });
   app.locals.archiveQueue = archives.queue;
   app.locals.archivesService = archives.service;
-  v1.use('/document-archives', archives.router);
+  v1.use('/document-archives', delegatedDbContext, archives.router);
 
   const generatedReports = createGeneratedReportsRouter({
     config,
