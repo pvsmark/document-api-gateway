@@ -7,14 +7,27 @@ function normalizeIp(value) {
 
 function createIpAllowlistMiddleware(config) {
   const allowed = new Set(config.allowedCallerIps.map(normalizeIp));
+  const allowAnyCaller = allowed.has('*');
+
   return function ipAllowlistMiddleware(req, res, next) {
     const callerIp = normalizeIp(req.ip || req.socket.remoteAddress);
-    if (!allowed.has(callerIp)) {
-      return next(createHttpError(403, 'Caller is not allowed.', 'CALLER_IP_FORBIDDEN'));
+
+    if (!allowAnyCaller && !allowed.has(callerIp)) {
+      return next(
+        createHttpError(
+          403,
+          'Caller is not allowed.',
+          'CALLER_IP_FORBIDDEN',
+        ),
+      );
     }
+
     req.callerIp = callerIp;
     return next();
   };
 }
 
-module.exports = { createIpAllowlistMiddleware, normalizeIp };
+module.exports = {
+  createIpAllowlistMiddleware,
+  normalizeIp,
+};
