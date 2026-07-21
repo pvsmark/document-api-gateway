@@ -1,12 +1,14 @@
 const { createHttpError } = require('../../utils/httpError');
 
+// AI_SUMMARY_DOCUMENT_LINK_PATCH_V1
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HASH_PATTERN = /^[0-9a-f]{64}$/i;
 const UNSAFE_FILENAME_PATTERN = /[<>:"/\\|?*\x00-\x1F]/;
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
-function positiveInteger(value, name, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+function positiveInteger(value, name, { min = 1, max = Number.MAX_SAFE_INTEGER, optional = false } = {}) {
   if (value === undefined || value === null || value === '') {
+    if (optional) return null;
     throw createHttpError(400, `${name} is required.`, 'VALIDATION_ERROR');
   }
   if (!/^\d+$/.test(String(value))) {
@@ -62,6 +64,7 @@ function commonValues(req) {
     summaryId: parseSummaryId(req.params.summaryId),
     clientId: positiveInteger(req.query.clientId, 'clientId'),
     currentYear: positiveInteger(req.query.currentYear, 'currentYear', { min: 1900, max: 9999 }),
+    documentId: positiveInteger(req.query.documentId, 'documentId', { optional: true }),
   };
 }
 

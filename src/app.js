@@ -99,9 +99,12 @@ function createApp(options = {}) {
   app.locals.archivesService = archives.service;
   v1.use('/document-archives', delegatedDbContext, archives.router);
 
+  // AI_SUMMARY_DOCUMENT_LINK_PATCH_V1
   const generatedReports = createGeneratedReportsRouter({
     config,
+    database,
     logger,
+    repository: options.generatedReportsRepository,
     storage: options.generatedReportsStorage,
     service: options.generatedReportsService,
   });

@@ -1,5 +1,6 @@
 const { pipeline } = require('stream/promises');
 
+// AI_SUMMARY_DOCUMENT_LINK_PATCH_V1
 function createGeneratedReportsController({ service, logger }) {
   function requestContext(req, res) {
     const controller = new AbortController();
@@ -29,6 +30,7 @@ function createGeneratedReportsController({ service, logger }) {
           operation: 'generated-report.upload',
           callerKeyId: req.callerKeyId,
           clientId: descriptor.clientId,
+          documentId: descriptor.documentId || undefined,
           summaryId: descriptor.summaryId,
           bytes: descriptor.fileSize,
           idempotent: descriptor.idempotent,
@@ -37,8 +39,10 @@ function createGeneratedReportsController({ service, logger }) {
         });
         return res.status(descriptor.idempotent ? 200 : 201).json({
           summaryId: descriptor.summaryId,
+          documentId: descriptor.documentId || null,
           clientId: descriptor.clientId,
           currentYear: descriptor.currentYear,
+          fileName: descriptor.fileName,
           relativeFilePath: descriptor.relativeFilePath,
           fileSize: descriptor.fileSize,
           fileHash: descriptor.fileHash,
@@ -66,6 +70,7 @@ function createGeneratedReportsController({ service, logger }) {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Length', String(descriptor.size));
       res.setHeader('X-PVS-Summary-Id', descriptor.summaryId);
+      if (descriptor.documentId) res.setHeader('X-PVS-Document-Id', String(descriptor.documentId));
 
       try {
         await pipeline(source, res);
@@ -74,6 +79,7 @@ function createGeneratedReportsController({ service, logger }) {
           operation: 'generated-report.stream',
           callerKeyId: req.callerKeyId,
           clientId: descriptor.clientId,
+          documentId: descriptor.documentId || undefined,
           summaryId: descriptor.summaryId,
           bytes: descriptor.size,
           durationMs: Date.now() - startedAt,
@@ -86,6 +92,7 @@ function createGeneratedReportsController({ service, logger }) {
             operation: 'generated-report.stream',
             callerKeyId: req.callerKeyId,
             clientId: descriptor.clientId,
+            documentId: descriptor.documentId || undefined,
             summaryId: descriptor.summaryId,
             durationMs: Date.now() - startedAt,
           });

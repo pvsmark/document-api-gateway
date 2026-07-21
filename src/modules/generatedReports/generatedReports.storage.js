@@ -4,9 +4,11 @@ const fsp = require('fs/promises');
 const path = require('path');
 const { Transform } = require('stream');
 const { pipeline: pipelineDefault } = require('stream/promises');
+const { resolveSourcePath } = require('../documents/documents.storage');
 const { createHttpError } = require('../../utils/httpError');
 const { timingSafeEqualText } = require('../../utils/crypto');
 
+// AI_SUMMARY_DOCUMENT_LINK_PATCH_V1
 function assertContained(root, target, pathImpl = path.win32) {
   const relative = pathImpl.relative(pathImpl.resolve(root), pathImpl.resolve(target));
   if (
@@ -24,7 +26,29 @@ function buildReportLocation(root, clientId, currentYear, summaryId, pathImpl = 
   const finalPath = pathImpl.resolve(directory, `${summaryId}.pdf`);
   assertContained(root, directory, pathImpl);
   assertContained(root, finalPath, pathImpl);
-  return { directory, finalPath, relativeFilePath };
+  return { directory, finalPath, relativeFilePath, fileName: `${summaryId}.pdf`, legacy: true };
+}
+
+function buildDocumentReportLocation(config, values, target, pathImpl = path.win32) {
+  const finalPath = resolveSourcePath({
+    SourceStoredPath: target.sourceStoredPath,
+    SourceRelativePath: target.sourceRelativePath,
+  }, config.storage.documentSourceRoot);
+  assertContained(config.storage.documentSourceRoot, finalPath, pathImpl);
+  const fileName = pathImpl.basename(finalPath);
+  if (pathImpl.extname(fileName).toLowerCase() !== '.pdf') {
+    throw createHttpError(422, 'The generated report target must be a PDF.', 'GENERATED_REPORT_TARGET_EXTENSION_INVALID');
+  }
+  if (fileName.toLowerCase() !== String(values.fileName || target.fileName).toLowerCase()) {
+    throw createHttpError(409, 'The generated report filename does not match the database target.', 'GENERATED_REPORT_FILENAME_MISMATCH');
+  }
+  return {
+    directory: pathImpl.dirname(finalPath),
+    finalPath,
+    relativeFilePath: pathImpl.relative(config.storage.documentSourceRoot, finalPath),
+    fileName,
+    legacy: false,
+  };
 }
 
 function createUploadVerifier({ declaredLength, maxBytes, signal }) {
@@ -54,11 +78,7 @@ function createUploadVerifier({ declaredLength, maxBytes, signal }) {
   return {
     transform,
     result() {
-      return {
-        bytes,
-        firstBytes,
-        fileHash: hash.digest('hex'),
-      };
+      return { bytes, firstBytes, fileHash: hash.digest('hex') };
     },
   };
 }
@@ -71,13 +91,90 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
   const randomUUID = dependencies.randomUUID || crypto.randomUUID;
   const activeUploads = new Set();
 
-  function location(values) {
+  function location(values, target) {
+    if (target) return buildDocumentReportLocation(config, values, target, pathImpl);
     return buildReportLocation(
       config.storage.generatedReportRoot,
       values.clientId,
       values.currentYear,
       values.summaryId,
       pathImpl,
+    );
+  }
+
+  // AI_SUMMARY_GATEWAY_NESTED_DIR_FIX_V1
+  async function ensureDocumentDirectory(directory) {
+    async function readDirectory(directoryPath, missingCode, invalidCode, missingMessage, invalidMessage) {
+      let stat;
+      try {
+        stat = await filePromises.lstat(directoryPath);
+      } catch (error) {
+        if (error && error.code === 'ENOENT') {
+          throw createHttpError(404, missingMessage, missingCode);
+        }
+        throw error;
+      }
+
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        throw createHttpError(409, invalidMessage, invalidCode);
+      }
+
+      return stat;
+    }
+
+    try {
+      const stat = await filePromises.lstat(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        throw createHttpError(
+          409,
+          'Generated report directory is invalid.',
+          'GENERATED_REPORT_DIRECTORY_INVALID',
+        );
+      }
+      return;
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw error;
+    }
+
+    const summariesDirectory = pathImpl.dirname(directory);
+    const clientDirectory = pathImpl.dirname(summariesDirectory);
+
+    // Never create the client folder. It must already exist in the approved
+    // PVS document tree. Only AI Summaries and its year folder may be created.
+    await readDirectory(
+      clientDirectory,
+      'GENERATED_REPORT_CLIENT_DIRECTORY_NOT_FOUND',
+      'GENERATED_REPORT_CLIENT_DIRECTORY_INVALID',
+      'The client document directory does not exist.',
+      'The client document directory is invalid.',
+    );
+
+    try {
+      await filePromises.mkdir(summariesDirectory, { recursive: false });
+    } catch (error) {
+      if (!error || error.code !== 'EEXIST') throw error;
+    }
+
+    await readDirectory(
+      summariesDirectory,
+      'GENERATED_REPORT_SUMMARIES_DIRECTORY_NOT_FOUND',
+      'GENERATED_REPORT_SUMMARIES_DIRECTORY_INVALID',
+      'The AI Summaries directory could not be created.',
+      'The AI Summaries directory is invalid.',
+    );
+
+    try {
+      await filePromises.mkdir(directory, { recursive: false });
+    } catch (error) {
+      if (!error || error.code !== 'EEXIST') throw error;
+    }
+
+    await readDirectory(
+      directory,
+      'GENERATED_REPORT_DIRECTORY_NOT_FOUND',
+      'GENERATED_REPORT_DIRECTORY_INVALID',
+      'The generated report year directory could not be created.',
+      'The generated report directory is invalid.',
     );
   }
 
@@ -103,8 +200,10 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
     if (stat.size === expectedSize && timingSafeEqualText(existingHash, expectedHash)) {
       return {
         summaryId: values.summaryId,
+        documentId: values.documentId || null,
         clientId: values.clientId,
         currentYear: values.currentYear,
+        fileName: reportLocation.fileName,
         relativeFilePath: reportLocation.relativeFilePath,
         fileSize: stat.size,
         fileHash: existingHash,
@@ -115,7 +214,7 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
   }
 
   async function persist(values, input, options = {}) {
-    const reportLocation = location(values);
+    const reportLocation = location(values, options.target);
     const uploadKey = reportLocation.finalPath.toLowerCase();
     if (activeUploads.has(uploadKey)) {
       throw createHttpError(409, 'Generated report upload is already in progress.', 'GENERATED_REPORT_UPLOAD_IN_PROGRESS');
@@ -124,7 +223,11 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
     activeUploads.add(uploadKey);
     let stagingPath;
     try {
-      await filePromises.mkdir(reportLocation.directory, { recursive: true });
+      if (reportLocation.legacy) {
+        await filePromises.mkdir(reportLocation.directory, { recursive: true });
+      } else {
+        await ensureDocumentDirectory(reportLocation.directory);
+      }
       stagingPath = pathImpl.join(
         reportLocation.directory,
         `.pvs-report-${values.summaryId}-${randomUUID()}.staging`,
@@ -158,10 +261,7 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
       }
 
       const existing = await existingDescriptor(
-        values,
-        reportLocation,
-        result.fileHash,
-        result.bytes,
+        values, reportLocation, result.fileHash, result.bytes,
       );
       if (existing) return existing;
 
@@ -171,10 +271,7 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
       } catch (error) {
         if (['EEXIST', 'EPERM', 'EACCES'].includes(error && error.code)) {
           const racedExisting = await existingDescriptor(
-            values,
-            reportLocation,
-            result.fileHash,
-            result.bytes,
+            values, reportLocation, result.fileHash, result.bytes,
           );
           if (racedExisting) return racedExisting;
         }
@@ -183,8 +280,10 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
 
       return {
         summaryId: values.summaryId,
+        documentId: values.documentId || null,
         clientId: values.clientId,
         currentYear: values.currentYear,
+        fileName: reportLocation.fileName,
         relativeFilePath: reportLocation.relativeFilePath,
         fileSize: result.bytes,
         fileHash: result.fileHash,
@@ -196,8 +295,8 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
     }
   }
 
-  async function prepare(values) {
-    const reportLocation = location(values);
+  async function prepare(values, options = {}) {
+    const reportLocation = location(values, options.target);
     let stat;
     try {
       stat = await filePromises.lstat(reportLocation.finalPath);
@@ -211,21 +310,19 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
       throw createHttpError(404, 'Generated report was not found.', 'GENERATED_REPORT_NOT_FOUND');
     }
     return {
+      fileName: reportLocation.fileName,
       size: stat.size,
       filePath: reportLocation.finalPath,
       createReadStream: () => fileSystem.createReadStream(reportLocation.finalPath),
     };
   }
 
-  return {
-    buildLocation: location,
-    persist,
-    prepare,
-  };
+  return { buildLocation: location, persist, prepare };
 }
 
 module.exports = {
   assertContained,
+  buildDocumentReportLocation,
   buildReportLocation,
   createGeneratedReportsStorage,
   createUploadVerifier,
