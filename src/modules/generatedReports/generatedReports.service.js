@@ -17,6 +17,7 @@ function createGeneratedReportsService({ repository, storage }) {
       || target.documentId !== values.documentId
       || target.clientId !== values.clientId
       || target.currentYear !== values.currentYear
+      || (values.generatedYear && target.generatedYear !== values.generatedYear)
     ) {
       throw createHttpError(
         403,

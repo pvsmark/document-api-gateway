@@ -27,9 +27,16 @@ function createGeneratedReportsRepository(database) {
 
   return {
     async findTarget(values) {
+      // AI_SUMMARY_GENERATED_YEAR_LOCATION_V1
       const rows = await database.query(
-        `CALL "tso"."WebAI_GetGeneratedReportTarget"(?, ?, ?, ?)`,
-        [values.summaryId, values.clientId, values.currentYear, values.documentId],
+        `CALL "tso"."WebAI_GetGeneratedReportTarget"(?, ?, ?, ?, ?)`,
+        [
+          values.summaryId,
+          values.clientId,
+          values.currentYear,
+          values.documentId,
+          values.generatedYear || null,
+        ],
       );
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row) return null;
@@ -39,6 +46,7 @@ function createGeneratedReportsRepository(database) {
         documentId: positiveInteger(rowValue(row, 'DocumentID')),
         clientId: positiveInteger(rowValue(row, 'ClientMasterID')),
         currentYear: positiveInteger(rowValue(row, 'CurrentYear')),
+        generatedYear: positiveInteger(rowValue(row, 'GeneratedYear')),
         summaryStatus: textValue(rowValue(row, 'SummaryStatus')),
         fileName: textValue(rowValue(row, 'FileName')),
         sourcePathType: textValue(rowValue(row, 'SourcePathType')),
@@ -52,6 +60,7 @@ function createGeneratedReportsRepository(database) {
         || !target.documentId
         || !target.clientId
         || !target.currentYear
+        || !target.generatedYear
         || !target.fileName
         || !target.sourceStoredPath
       ) {

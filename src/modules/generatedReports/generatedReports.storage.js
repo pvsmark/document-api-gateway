@@ -136,11 +136,12 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
       if (!error || error.code !== 'ENOENT') throw error;
     }
 
-    const summariesDirectory = pathImpl.dirname(directory);
-    const clientDirectory = pathImpl.dirname(summariesDirectory);
+    const categoryDirectory = pathImpl.dirname(directory);
+    const clientDirectory = pathImpl.dirname(categoryDirectory);
 
+    // AI_SUMMARY_GENERATED_YEAR_LOCATION_V1
     // Never create the client folder. It must already exist in the approved
-    // PVS document tree. Only AI Summaries and its year folder may be created.
+    // PVS document tree. Only the database-approved category and year folders may be created.
     await readDirectory(
       clientDirectory,
       'GENERATED_REPORT_CLIENT_DIRECTORY_NOT_FOUND',
@@ -150,17 +151,17 @@ function createGeneratedReportsStorage(config, dependencies = {}) {
     );
 
     try {
-      await filePromises.mkdir(summariesDirectory, { recursive: false });
+      await filePromises.mkdir(categoryDirectory, { recursive: false });
     } catch (error) {
       if (!error || error.code !== 'EEXIST') throw error;
     }
 
     await readDirectory(
-      summariesDirectory,
-      'GENERATED_REPORT_SUMMARIES_DIRECTORY_NOT_FOUND',
-      'GENERATED_REPORT_SUMMARIES_DIRECTORY_INVALID',
-      'The AI Summaries directory could not be created.',
-      'The AI Summaries directory is invalid.',
+      categoryDirectory,
+      'GENERATED_REPORT_CATEGORY_DIRECTORY_NOT_FOUND',
+      'GENERATED_REPORT_CATEGORY_DIRECTORY_INVALID',
+      'The generated report category directory could not be created.',
+      'The generated report category directory is invalid.',
     );
 
     try {

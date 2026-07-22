@@ -59,11 +59,19 @@ function parseContentLength(req, maxBytes) {
   return contentLength;
 }
 
+// AI_SUMMARY_GENERATED_YEAR_LOCATION_V1
 function commonValues(req) {
   return {
     summaryId: parseSummaryId(req.params.summaryId),
     clientId: positiveInteger(req.query.clientId, 'clientId'),
+    // currentYear remains the target summary year.
     currentYear: positiveInteger(req.query.currentYear, 'currentYear', { min: 1900, max: 9999 }),
+    // generatedYear is optional for backward-compatible retrieval of historical reports.
+    generatedYear: positiveInteger(req.query.generatedYear, 'generatedYear', {
+      min: 1900,
+      max: 9999,
+      optional: true,
+    }),
     documentId: positiveInteger(req.query.documentId, 'documentId', { optional: true }),
   };
 }
